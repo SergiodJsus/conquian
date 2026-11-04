@@ -204,7 +204,14 @@ body.in-game .top{display:none}
 .meld .badge{position:absolute;left:8px;bottom:4px;font-size:11px;font-weight:700;white-space:nowrap}
 .meld.ok .badge{color:var(--ok)}.meld.bad .badge{color:var(--bad)}
 .put{position:absolute;right:-6px;top:-12px;border:0;border-radius:999px;background:var(--marigold);color:var(--marigold-ink);font-weight:700;font-size:12px;padding:5px 10px;cursor:pointer;z-index:2;box-shadow:var(--shadow);animation:pop .2s ease-out}
-.meld-new{min-height:calc(var(--mw)*1.5 + 30px);min-width:calc(var(--mw)*1.6);border:1.5px dashed var(--marigold);border-radius:12px;background:transparent;color:var(--marigold);font-weight:700;font-size:13px;cursor:pointer;padding:6px 10px;animation:pop .2s ease-out}
+.meld-new{min-height:calc(var(--mw)*1.5 + 30px);min-width:calc(var(--mw)*1.6);border:1.5px dashed var(--marigold);border-radius:12px;background:transparent;color:var(--marigold);font-weight:700;font-size:13px;cursor:pointer;padding:6px 10px}
+.meld-new.ready{animation:pop .2s ease-out}
+/* Arrastrar cartas a tus juegos: se ilumina donde caería la carta. */
+.drop-on{outline:3px dashed var(--marigold);outline-offset:4px;border-radius:12px}
+.meld.ws.drop-on{outline-style:solid;outline-offset:2px}
+.meld-new.drop-on{outline:0;border-style:solid;background:color-mix(in srgb,var(--marigold) 18%,transparent)}
+.card.riding{opacity:.4}
+.card.dragging[data-more]::after{content:attr(data-more);position:absolute;top:-9px;right:-9px;background:var(--marigold);color:var(--marigold-ink);font:700 12px/1 var(--f-body);border-radius:999px;padding:4px 7px;box-shadow:var(--shadow)}
 .center{display:grid;grid-template-columns:1fr auto 1fr;gap:8px 10px;align-items:center;align-content:center;padding-block:8px;border-block:1px dashed var(--line)}
 .center .prompt{grid-column:1/-1}
 .pile{display:grid;justify-items:center;gap:6px;font-size:12px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
@@ -225,6 +232,9 @@ button.stack.live .card:last-child{box-shadow:0 0 0 3px var(--marigold),var(--sh
 .hand{display:flex;justify-content:center;align-items:flex-end;padding-top:16px;padding-bottom:4px;min-height:calc(var(--hw)*1.5 + 20px)}
 .hand .card{--cw:var(--hw)}
 #hand .card{touch-action:pan-y;cursor:grab}
+/* Mientras puedes armar juegos, el dedo arrastra la carta en vez de deslizar la página. */
+#my-melds.building .card,.game.can-use #face .card{cursor:grab;touch-action:none}
+.game.building #hand .card,.game.can-use #hand .card{touch-action:none}
 .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;padding-block:2px 10px;min-height:56px}
 .actions.fresh .btn{animation:pop .24s ease-out}
 .btn.force{background:transparent;color:var(--bad);border-color:var(--bad)}
@@ -290,7 +300,7 @@ dialog::backdrop{background:rgba(5,10,30,.55)}
 }
 @media (prefers-reduced-motion:reduce){
   .card,.btn{transition:none}
-  .pill,.face.mine .card,button.stack.live .card:last-child,.prompt.fresh,.actions.fresh .btn,.put,.meld-new,#toast:not([hidden]){animation:none}
+  .pill,.face.mine .card,button.stack.live .card:last-child,.prompt.fresh,.actions.fresh .btn,.put,.meld-new.ready,#toast:not([hidden]){animation:none}
 }
 </style>
 </head>
@@ -764,7 +774,7 @@ function rulesHTML(){
     <div><h3>Los juegos</h3><p><b>Tercia</b>: 3 o 4 cartas del mismo número, como tres reyes. <b>Corrida</b>: 3 o más cartas seguidas del mismo palo, como 6, 7 y sota de copas. No da la vuelta: después del rey no sigue el as.</p></div>
     <div><h3>Tu turno</h3><p>Volteas la carta de arriba del monte. Si te sirve, la bajas en un juego junto con cartas de tu mano y luego <b>pagas</b>: tiras una carta para tu rival. Las cartas nunca se guardan en la mano.</p></div>
     <div><h3>Pasar</h3><p>Si la carta no te sirve, la pasas y el siguiente jugador puede usarla, y así en orden. Si nadie la quiere, se va a las muertas y voltea el que sigue de quien la sacó. La carta que pagas se le ofrece a todos menos a ti.</p></div>
-    <div><h3>Acomodar</h3><p>Al bajar puedes reacomodar tus juegos. Si volteas el 6 de copas y tienes el 4 de copas, puedes sacar el 5 de copas de tu cuarta de cincos y armar la corrida 4, 5 y 6.</p></div>
+    <div><h3>Acomodar</h3><p>Al bajar puedes reacomodar tus juegos. Si volteas el 6 de copas y tienes el 4 de copas, puedes sacar el 5 de copas de tu cuarta de cincos y armar la corrida 4, 5 y 6. Arrastra cada carta al juego donde la quieres, o tócalas y luego «Aquí».</p></div>
     <div><h3>Obligar</h3><p>Si alguien pasa una carta que le queda directo a uno de sus juegos bajados, cualquier otro puede decir <b>«¡Te obligo!»</b> antes de que otro la pase o se voltee la siguiente: la tiene que tomar y pagar otra. Nadie te avisa, te tienes que dar cuenta tú. Si te equivocas, no pasa nada y sigue el juego.</p></div>
     <div><h3>Tablas</h3><p>Si se acaba el monte y nadie bajó todo, la mano queda en tablas y se reparte otra vez.</p></div>
   </div>`;
@@ -877,14 +887,14 @@ function forcer(S){for(let i=S.log.length-1;i>=0;i--)if(S.log[i].k==='force')ret
 function lastTaken(S){const L=S.log.slice(-2);for(let i=L.length-1;i>=0;i--)if(L[i].k==='take')return L[i];return null}
 function meldsHTML(melds,hl){
   if(!melds.length)return '<span class="empty">Sin juegos bajados</span>';
-  return melds.map(m=>`<div class="meld" title="${meldKind(m)||''}">${m.map(c=>cardHTML(c,{cls:c===hl?'nueva':''})).join('')}</div>`).join('');
+  return melds.map((m,i)=>`<div class="meld" data-i="${i}" title="${meldKind(m)||''}">${m.map(c=>cardHTML(c,{cls:c===hl?'nueva':''})).join('')}</div>`).join('');
 }
 function wsMeldsHTML(){
   const ws=app.ui.build,has=ws.sel.length>0;
   return ws.melds.map((m,i)=>{
     const k=meldKind(m),why=k||(m.length<3?`Faltan ${3-m.length}`:'No es juego');
-    return `<div class="meld ws ${k?'ok':'bad'}">${m.map(c=>cardHTML(c,{act:'tap',cls:(ws.sel.includes(c)?'sel ':'')+(c===ws.face?'nueva':'')})).join('')}<span class="badge">${why}</span>${has?`<button type="button" class="put" data-a="put" data-i="${i}">Aquí</button>`:''}</div>`;
-  }).join('')+(has?'<button type="button" class="meld-new" data-a="put" data-i="new">＋ Juego nuevo</button>':'');
+    return `<div class="meld ws ${k?'ok':'bad'}" data-i="${i}">${m.map(c=>cardHTML(c,{act:'tap',cls:(ws.sel.includes(c)?'sel ':'')+(c===ws.face?'nueva':'')})).join('')}<span class="badge">${why}</span>${has?`<button type="button" class="put" data-a="put" data-i="${i}">Aquí</button>`:''}</div>`;
+  }).join('')+`<button type="button" class="meld-new${has?' ready':''}" data-a="put" data-i="new">＋ Juego nuevo</button>`;
 }
 function handHTML(){
   const S=app.S,ui=app.ui,ws=ui.build;
@@ -935,7 +945,7 @@ function promptHTML(){
   }
   if(ui.build){
     const ws=ui.build,prob=buildProblem();
-    if(!ws.moves)return `Toca cartas y luego <strong>Aquí</strong> para armar tu juego con ${withArt(ws.face)}.`;
+    if(!ws.moves)return `<strong>Arrastra</strong> tus cartas a un juego para armarlo con ${withArt(ws.face)}, o tócalas y luego <strong>Aquí</strong>.`;
     return prob?`<span class="warn">${prob}</span>`:'Todo cuadra. Toca <strong>Bajar</strong> para confirmar.';
   }
   if(S.phase==='over')return S.winner===-1?'Se acabó el monte y nadie bajó todo: <strong>tablas</strong>.':S.winner===me?'<strong>¡Ganaste la mano!</strong>':`<strong>${who(S.winner)} ganó la mano.</strong>`;
@@ -1019,7 +1029,8 @@ function logText(e){
 function renderGame(){
   const S=app.S,me=app.me,ui=app.ui,ws=ui.build,target=S.cfg.hand+1;
   const over=S.phase==='over',hl=lastTaken(S),turnOf=actor(S),ops=others(S);
-  const myN=S.melds[me].flat().length;
+  const myN=S.melds[me].flat().length,canUse=canUseNow();
+  const dragHint=ws||canUse?'Arrastra cartas a tus juegos':'Arrastra para acomodar';
   const netTag=app.mode==='p2p'?` · Mesa ${esc(net.code)} · <span class="net ${online()?'on':''}"><i></i>${online()?'Conectado':'Sin conexión'}</span>`:'';
   const oppZone=o=>{
     const n=S.melds[o].flat().length,h=S.hands[o];
@@ -1035,7 +1046,7 @@ function renderGame(){
   const promptKey=prompt.replace(/\d+ms|[\d.]+\)/g,''),actsKey=[S.round,S.seq,S.phase,turnOf,!!ws,ui.paySel,ui.busy,linked()].join('|');
   const freshP=promptKey!==app.lastPrompt,freshA=actsKey!==app.lastActs;
   app.lastPrompt=promptKey;app.lastActs=actsKey;
-  view.innerHTML=`<section class="game">
+  view.innerHTML=`<section class="game${ws?' building':canUse?' can-use':''}">
     <div class="bar">
       <div class="score" aria-label="Marcador">
         <span class="pl">Tú <b>${S.score[me]}</b></span>${ops.map(o=>`<span class="pl"><b>${S.score[o]}</b> ${esc(shortOf(o))}</span>`).join('')}
@@ -1052,7 +1063,7 @@ function renderGame(){
       </div>
       <div class="zone">
         <div class="who"><span class="name">Tu mano${(turnOf===me&&!over)||swapWaiting(S,me)?'<span class="pill">Te toca</span>':''}</span><span class="row">
-          <span class="hint">Arrastra para acomodar</span>
+          <span class="hint">${dragHint}</span>
           <span class="seg sm" role="group" aria-label="Ordenar la mano"><button type="button" data-a="sort" data-by="palo" aria-label="Ordenar por palo">Palo</button><button type="button" data-a="sort" data-by="numero" aria-label="Ordenar por número">Número</button></span></span></div>
         <div class="hand" id="hand">${handHTML()}</div>
       </div>
@@ -1089,11 +1100,39 @@ function fitScreen(){
 }
 window.addEventListener('resize',fitScreen);
 
-// ===== Arrastrar cartas de la mano =====
-let drag=null,suppressUntil=0;
+// ===== Arrastrar cartas =====
+// De la mano se arrastra para acomodarla. Al armar juegos, cualquier carta tuya se arrastra a un juego, a uno nuevo
+// o de regreso a la mano; y cuando te ofrecen una carta, soltarla (o soltar una tuya) en tus juegos es como "Usar carta".
+let drag=null,suppressUntil=0,hot=null;
+const canUseNow=()=>{const S=app.S;return !!S&&app.view==='game'&&!app.ui.build&&!app.ui.busy&&S.phase==='decide'&&actor(S)===app.me&&linked()};
+// Si arrastras una carta que tenías marcada junto con otras, se van todas las marcadas.
+function dragCards(d){const ws=app.ui.build;return ws&&ws.sel.length>1&&ws.sel.includes(d.c)?ws.sel.slice():[d.c]}
+function setHot(el){if(hot===el)return;if(hot)hot.classList.remove('drop-on');hot=el||null;if(hot)hot.classList.add('drop-on')}
+function dropTarget(px,py,d){
+  const ws=app.ui.build,mm=$('#my-melds'),hand=$('#hand');
+  const mz=mm&&mm.parentElement,hz=hand&&hand.parentElement;
+  const over=(el,pad=0)=>{if(!el)return false;const r=el.getBoundingClientRect();return px>=r.left-pad&&px<=r.right+pad&&py>=r.top-pad&&py<=r.bottom+pad};
+  const meldAt=sel=>[...view.querySelectorAll(sel)].find(m=>over(m,8));
+  if(ws){
+    if(d.src==='face')return null;
+    const m=meldAt('#my-melds .meld.ws');if(m)return {kind:'meld',el:m,i:+m.dataset.i};
+    const nw=view.querySelector('#my-melds .meld-new');
+    if(over(nw,8)||over(mz))return {kind:'new',el:nw};
+    if(d.src==='meld'&&over(hz))return {kind:'hand',el:dragCards(d).every(c=>ws.fromHand.includes(c))?hand:null};
+    return null;
+  }
+  if(!canUseNow()||d.src==='meld')return null;
+  const m=meldAt('#my-melds .meld');if(m)return {kind:'use',el:m,i:+m.dataset.i};
+  if(over(mz))return {kind:'use',el:mm,i:'face'};
+  if(d.src==='hand'&&over($('#face'),8))return {kind:'use',el:$('#face'),i:'face'};
+  return null;
+}
 view.addEventListener('pointerdown',e=>{
-  const el=e.target.closest('#hand .card');if(!el||(e.pointerType==='mouse'&&e.button!==0))return;
-  drag={el,pid:e.pointerId,x0:e.clientX,y0:e.clientY,gx:0,gy:0,active:false};
+  if(e.pointerType==='mouse'&&e.button!==0)return;
+  const el=e.target.closest('#hand .card, #my-melds.building .meld.ws .card, #face .card');if(!el)return;
+  const src=el.closest('#hand')?'hand':el.closest('#face')?'face':'meld';
+  if(src==='face'&&!canUseNow())return;
+  drag={el,src,c:el.dataset.k,pid:e.pointerId,x0:e.clientX,y0:e.clientY,gx:0,gy:0,active:false};
 });
 window.addEventListener('pointermove',e=>{
   if(!drag||e.pointerId!==drag.pid)return;
@@ -1105,6 +1144,11 @@ window.addEventListener('pointermove',e=>{
     drag.el.classList.add('dragging');
     try{drag.el.setPointerCapture(drag.pid)}catch{}
     const r=drag.el.getBoundingClientRect();drag.gx=drag.x0-r.left;drag.gy=drag.y0-r.top;
+    const cs=dragCards(drag);
+    if(cs.length>1){
+      drag.el.dataset.more='+'+(cs.length-1);
+      view.querySelectorAll('[data-k]').forEach(c=>{if(c!==drag.el&&cs.includes(c.dataset.k))c.classList.add('riding')});
+    }
   }
   e.preventDefault();
   moveDrag(e.clientX,e.clientY);
@@ -1113,6 +1157,9 @@ function moveDrag(px,py){
   const el=drag.el,hand=el.parentElement;
   const place=()=>{el.style.transform='none';const r=el.getBoundingClientRect();el.style.transform=`translate(${px-drag.gx-r.left}px,${py-drag.gy-r.top}px)`};
   place();
+  const t=dropTarget(px,py,drag);setHot(t&&t.el);
+  // Encima de tus juegos la mano se queda quieta; solo se reacomoda cuando la carta anda por la mano.
+  if(drag.src!=='hand'||t)return;
   const all=[...hand.querySelectorAll('.card')],sibs=all.filter(c=>c!==el);
   let idx=sibs.findIndex(c=>{const r=c.getBoundingClientRect();return px<r.left+r.width/2});
   if(idx<0)idx=sibs.length;
@@ -1126,38 +1173,69 @@ function endDrag(e){
   if(!drag)return;
   if(e&&e.pointerId!==drag.pid)return;
   const d=drag;drag=null;
+  setHot(null);
   if(!d.active)return;
   suppressUntil=performance.now()+350;
   const el=d.el;if(!el.isConnected)return;
+  // Al volver a dibujar la mesa, la carta vuela desde donde la soltaste hasta su lugar nuevo.
+  if(e&&e.type==='pointerup'){const t=dropTarget(e.clientX,e.clientY,d);if(t&&dropOn(d,t,e.clientX))return}
+  view.querySelectorAll('.card.riding').forEach(c=>c.classList.remove('riding'));
+  delete el.dataset.more;
   const from=el.getBoundingClientRect();
   el.classList.remove('dragging');el.style.transform='';
-  fitHand();
+  if(d.src==='hand')fitHand();
   const to=el.getBoundingClientRect();
   if(!reduceMotion)el.animate([{transform:`translate(${from.left-to.left}px,${from.top-to.top}px)`},{transform:'none'}],{duration:220,easing:'cubic-bezier(.2,.8,.2,1)'});
-  setOrder([...el.parentElement.querySelectorAll('.card')].map(c=>c.dataset.k));
-  SFX.card(.12);
+  if(d.src==='hand'){setOrder([...el.parentElement.querySelectorAll('.card')].map(c=>c.dataset.k));SFX.card(.12)}
+}
+// Devuelve false si ahí no se puede soltar: la carta regresa a donde estaba.
+function dropOn(d,t,px){
+  if(t.kind==='use'){
+    startBuild(false);
+    const ws=app.ui.build,fi=ws.melds.length-1,to=t.i==='face'?fi:t.i;
+    if(d.src==='hand'||to!==fi)wsMove([d.c],to);
+    SFX.card(.2);render();return true;
+  }
+  const ws=app.ui.build;if(!ws)return false;
+  const cards=dragCards(d);
+  if(t.kind==='hand'){
+    if(cards.some(c=>!ws.fromHand.includes(c))){toast('Solo las cartas de tu mano pueden regresar a la mano.');return false}
+    const hc=[...view.querySelectorAll('#hand .card')],ids=hc.map(c=>c.dataset.k);
+    let at=hc.findIndex(c=>{const r=c.getBoundingClientRect();return px<r.left+r.width/2});if(at<0)at=ids.length;
+    wsMove(cards,'hand');ids.splice(at,0,...cards);setOrder(ids);
+  }else{
+    if(t.kind==='meld'&&ws.melds[t.i]&&cards.every(c=>ws.melds[t.i].includes(c)))return false;
+    wsMove(cards,t.kind==='new'?'new':t.i);
+  }
+  SFX.card(.2);render();return true;
 }
 window.addEventListener('pointerup',endDrag);
 window.addEventListener('pointercancel',endDrag);
 
 // ===== Armar juegos (cuando usas una carta) =====
-function startBuild(){
+function startBuild(show=true){
   const S=app.S,me=app.me;
   app.ui.build={face:S.face.c,melds:S.melds[me].map(m=>m.slice()).concat([[S.face.c]]),hand:S.hands[me].slice(),fromHand:S.hands[me].slice(),sel:[],moves:0};
-  render();
+  if(show)render();
+}
+// Mueve cartas a un juego (su número), a uno nuevo ('new') o a la mano ('hand'). No dibuja.
+function wsMove(cards,target){
+  const ws=app.ui.build;if(!ws||!cards.length)return false;
+  if(target==='hand'&&cards.some(c=>!ws.fromHand.includes(c))){toast('Solo las cartas de tu mano pueden regresar a la mano.');return false}
+  const set=new Set(cards);
+  ws.melds=ws.melds.map(m=>m.filter(c=>!set.has(c)));
+  ws.hand=ws.hand.filter(c=>!set.has(c));
+  if(target==='hand')ws.hand.push(...cards);
+  else if(target!=='new'&&ws.melds[+target])ws.melds[+target].push(...cards);
+  else ws.melds.push([...cards]);
+  ws.melds=ws.melds.filter(m=>m.length).map(sortMeld);
+  ws.sel=ws.sel.filter(c=>!set.has(c));ws.moves++;
+  return true;
 }
 function wsPut(target){
-  const ws=app.ui.build;if(!ws||!ws.sel.length)return;
-  if(target==='hand'&&ws.sel.some(c=>!ws.fromHand.includes(c))){toast('Solo las cartas de tu mano pueden regresar a la mano.');return}
-  const sel=new Set(ws.sel);
-  ws.melds=ws.melds.map(m=>m.filter(c=>!sel.has(c)));
-  ws.hand=ws.hand.filter(c=>!sel.has(c));
-  if(target==='hand')ws.hand.push(...ws.sel);
-  else if(target==='new')ws.melds.push([...ws.sel]);
-  else ws.melds[+target].push(...ws.sel);
-  ws.melds=ws.melds.filter(m=>m.length).map(sortMeld);
-  ws.sel=[];ws.moves++;
-  render();
+  const ws=app.ui.build;if(!ws)return;
+  if(!ws.sel.length){if(target==='new')toast('Arrastra una carta hasta aquí, o tócala primero.');return}
+  if(wsMove(ws.sel.slice(),target))render();
 }
 
 // ===== Jugadas =====
@@ -1522,7 +1600,7 @@ const H={
   }
 };
 document.addEventListener('click',e=>{
-  if(performance.now()<suppressUntil&&e.target.closest('#hand .card')){e.preventDefault();return}
+  if(performance.now()<suppressUntil&&view.contains(e.target)){e.preventDefault();return}
   const t=e.target.closest('[data-a]');if(!t||t.disabled)return;
   const fn=H[t.dataset.a];if(fn){e.preventDefault();fn(t)}
 });
