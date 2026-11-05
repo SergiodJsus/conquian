@@ -118,6 +118,8 @@ button.card{padding:0;border:0;cursor:pointer}
 @keyframes fadeUp{from{opacity:0;translate:0 6px}to{opacity:1;translate:0 0}}
 @keyframes pulse{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--marigold) 22%,transparent)}}
 @keyframes toastIn{from{opacity:0;translate:0 12px}to{opacity:1;translate:0 0}}
+@keyframes think{0%,60%,100%{translate:0 var(--arc,0px)}30%{translate:0 calc(var(--arc,0px) - 5px)}}
+@keyframes dealIn{from{opacity:0;translate:0 10px;scale:.9}to{opacity:1;translate:0 0;scale:1}}
 .confetti{position:fixed;inset:0;pointer-events:none;z-index:30;overflow:hidden}
 .confetti i{position:absolute;top:0;width:9px;height:13px;border-radius:2px}
 
@@ -152,7 +154,7 @@ button.card{padding:0;border:0;cursor:pointer}
 
 /* Mesa */
 /* La mesa ocupa justo la pantalla; --k encoge las cartas cuando no caben (lo calcula fitScreen). */
-.game{--k:1;--hw:calc(min(96px,17vw)*var(--k));--mw:calc(min(56px,11vw)*var(--k));--fw:calc(min(108px,21vw)*var(--k));--sw:calc(var(--fw)*.56);--bw:calc(min(24px,6vw)*var(--k));
+.game{--k:1;--hw:calc(min(96px,17vw)*var(--k));--mw:calc(min(56px,11vw)*var(--k));--fw:calc(min(108px,21vw)*var(--k));--sw:calc(var(--fw)*.56);--bw:calc(min(38px,8.5vw)*var(--k));
   max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:8px;padding-top:8px;overflow:hidden;
   height:calc(100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
   height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
@@ -186,11 +188,17 @@ body.in-game .top{display:none}
 .prog i.on{background:var(--cobalt)}
 .opp-row{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
 .opp-row .melds{flex:1 1 auto;min-width:0}
-.opp-hand{display:flex;align-items:flex-end;flex:none}
-.opp-hand .card{--cw:var(--bw)}
-.opp-hand .card+.card{margin-left:calc(var(--bw)*-.55)}
-.opp-hand.shown .card{--cw:calc(var(--bw)*1.5)}
-.opp-hand.shown .card+.card{margin-left:calc(var(--bw)*-.8)}
+/* Mano del rival: dorsos en abanico con sombra corta (la grande se juntaba en una mancha) y cuántas le quedan. */
+.opp-hand{display:flex;align-items:flex-end;flex:none;position:relative;padding:8px 6px 2px}
+.opp-hand .card{--cw:var(--bw);box-shadow:0 1px 1.5px rgba(10,20,50,.3),0 0 0 .5px rgba(10,20,50,.18)}
+.opp-hand .card+.card{margin-left:calc(var(--bw)*-.6)}
+.opp-hand.shown .card{--cw:calc(var(--bw)*1.35);box-shadow:var(--shadow)}
+.opp-hand.shown .card+.card{margin-left:calc(var(--bw)*-.75)}
+.opp-hand.thinking .card{animation:think 1.5s ease-in-out infinite;animation-delay:calc(var(--i,0)*90ms)}
+.opp-count{position:absolute;top:-4px;right:-4px;z-index:3;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--cobalt);color:var(--cobalt-ink);font:800 13px/22px var(--f-display);text-align:center;font-variant-numeric:lining-nums tabular-nums;box-shadow:0 0 0 2px var(--surface)}
+/* Zona de quien juega ahora. */
+.zone{border-radius:12px;transition:background-color .3s ease,box-shadow .3s ease}
+.zone.turn{--tint:color-mix(in srgb,var(--marigold) 10%,transparent);background-color:var(--tint);box-shadow:0 0 0 6px var(--tint)}
 .melds{display:flex;flex-wrap:wrap;gap:10px 14px;min-height:calc(var(--mw)*1.5);align-items:flex-end}
 .meld{display:flex;align-items:flex-end;position:relative}
 .meld .card{--cw:var(--mw)}
@@ -219,6 +227,33 @@ body.in-game .top{display:none}
 .stack .card{--cw:var(--sw);position:absolute;left:0;bottom:0}
 button.stack{cursor:pointer;border-radius:10px}
 button.stack.live .card:last-child{box-shadow:0 0 0 3px var(--marigold),var(--shadow);animation:pulse 1.8s ease-in-out infinite}
+/* Muertas: un montón desordenado que se abre para ver las cartas que ya pasaron. */
+.dead-pile .card{transition:rotate .22s ease,translate .22s ease}
+.peek{position:absolute;right:-8px;bottom:-6px;z-index:3;width:26px;height:26px;border-radius:50%;background:var(--marigold);color:var(--marigold-ink);display:grid;place-items:center;box-shadow:0 0 0 2px var(--surface),var(--shadow);transition:scale .2s ease}
+.peek svg{width:16px;height:16px;display:block}
+@media (hover:hover){
+  button.dead-pile:hover .card:nth-last-child(2){rotate:-15deg;translate:-7px 0}
+  button.dead-pile:hover .card:nth-last-child(3){rotate:13deg;translate:7px 0}
+  button.dead-pile:hover .card:last-child{translate:0 -4px}
+  button.dead-pile:hover .peek{scale:1.12}
+}
+button.dead-pile:focus-visible .card:nth-last-child(2){rotate:-15deg;translate:-7px 0}
+button.dead-pile:focus-visible .card:nth-last-child(3){rotate:13deg;translate:7px 0}
+.dead-dlg{display:grid;gap:16px}
+.dead-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 14px}
+.dead-head p{margin:0}
+.dead-grid{display:flex;flex-wrap:wrap;gap:12px 10px;align-items:flex-start}
+.dead-item{display:grid;justify-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--marigold);animation:dealIn .32s ease-out both;animation-delay:calc(var(--i,0)*22ms)}
+.dead-item .card{--cw:54px}
+.still .dead-item:not(.nw){animation:none}
+.still .dead-item.nw{animation-delay:0s}
+.dead-rows{display:grid;gap:12px}
+.dead-row{display:grid;grid-template-columns:86px minmax(0,1fr);align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px dashed var(--line)}
+.dead-row:last-child{border-bottom:0;padding-bottom:0}
+.dead-row .cards{display:flex;flex-wrap:wrap;gap:8px;min-height:40px;align-items:center}
+.suit-lbl{font-family:var(--f-display);font-weight:700;font-size:18px;line-height:1.1;color:var(--sc)}
+@media (prefers-color-scheme: dark){.suit-lbl{color:color-mix(in srgb,var(--sc) 55%,#fff)}}
+.suit-lbl small{display:block;font-family:var(--f-body);font-weight:400;font-size:12px}
 .face{display:grid;justify-items:center;gap:6px;text-align:center}
 .face .card{--cw:var(--fw)}
 .face.mine .card{box-shadow:0 0 0 3px var(--marigold),var(--shadow);animation:pulse 1.8s ease-in-out infinite}
@@ -297,10 +332,14 @@ dialog::backdrop{background:rgba(5,10,30,.55)}
   .slot{font-size:11px;padding:4px;overflow:hidden}
   .bigcode{font-size:52px}
   .hint{display:none}
+  .dead-row{grid-template-columns:minmax(0,1fr);gap:6px}
+  .suit-lbl small{display:inline;margin-left:8px}
+  .dead-item .card{--cw:46px}
 }
 @media (prefers-reduced-motion:reduce){
   .card,.btn{transition:none}
-  .pill,.face.mine .card,button.stack.live .card:last-child,.prompt.fresh,.actions.fresh .btn,.put,.meld-new.ready,#toast:not([hidden]){animation:none}
+  .pill,.face.mine .card,button.stack.live .card:last-child,.prompt.fresh,.actions.fresh .btn,.put,.meld-new.ready,#toast:not([hidden]),.opp-hand.thinking .card,.dead-item{animation:none}
+  .zone,.peek{transition:none}
 }
 </style>
 </head>
@@ -582,6 +621,9 @@ function cardHTML(c,{act='',cls='',style='',key=true}={}){
   return `<div class="card ${cls}" role="img" aria-label="${name}"${k}${st}>${faceSVG(c)}</div>`;
 }
 const backHTML=(style='')=>`<div class="card back" aria-hidden="true"${style?` style="${style}"`:''}></div>`;
+const EYE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+// Cartas en abanico, como se agarran en la mano; --i escalona las animaciones.
+function fanStyle(i,n,arc=4){const mid=(n-1)/2,t=mid?(i-mid)/mid:0,deg=Math.min(9,n*1.4);return `--rot:${(t*deg).toFixed(1)}deg;--arc:${(t*t*arc).toFixed(1)}px;--i:${i}`}
 
 // ===== Estado de la página =====
 const $=s=>document.querySelector(s);
@@ -597,6 +639,8 @@ const savedOrder=store.get('order',null);
 const app={
   view:'home',mode:null,S:null,me:0,rendered:null,lastActs:'',lastPrompt:'',
   sortBy:store.get('sort','palo'),
+  deadBy:store.get('deadBy','orden')==='palo'?'palo':'orden',
+  dlg:null,
   sound:store.get('sound',true),
   order:savedOrder&&Array.isArray(savedOrder.list)?savedOrder:{key:'',list:[]},
   cfg:{hand:[8,9,10].includes(savedCfg.hand)?savedCfg.hand:8,obligar:savedCfg.obligar!==false,cambio:savedCfg.cambio!==false},
@@ -683,15 +727,18 @@ function flyFrom(el,from,to,{dur=430,delay=0,fade=false}={}){
   const k0={transform:`translate(${dx}px,${dy}px) scale(${s})`};if(fade)k0.opacity=.35;
   el.animate([k0,{transform:'none',opacity:1}],{duration:dur,delay,easing:'cubic-bezier(.2,.75,.25,1)',fill:'backwards'});
 }
-// Un dorso que viaja de un lugar a otro (al voltear, al pagar el rival, al irse a las muertas).
-function ghost(from,to,{dur=440,flipOut=false}={}){
+// Un dorso que viaja de un lugar a otro (al voltear, al pagar el rival). Con face, la carta viaja boca arriba
+// y se voltea al llegar (al irse a las muertas).
+function ghost(from,to,{dur=440,flipOut=false,face=null}={}){
   if(!from||!to)return;
-  const g=document.createElement('div');g.className='card back ghost';
+  const g=document.createElement('div');
+  if(face&&validCard(face)){g.className='card ghost';g.innerHTML=faceSVG(face)}else g.className='card back ghost';
   g.style.cssText=`left:${from.left}px;top:${from.top}px;--cw:${from.width}px`;
   document.body.appendChild(g);
   const [fx,fy]=center(from),[tx,ty]=center(to),end=`translate(${tx-fx}px,${ty-fy}px) scale(${to.width/from.width})`;
   const kf=flipOut
     ?[{transform:'none'},{transform:end,offset:.5},{transform:end+' perspective(700px) rotateY(90deg)',offset:.68},{transform:end+' perspective(700px) rotateY(90deg)',opacity:0,offset:1}]
+    :face?[{transform:'none'},{transform:end,offset:.7},{transform:end+' perspective(700px) rotateY(90deg)',offset:1}]
     :[{transform:'none'},{transform:end,opacity:.85}];
   const a=g.animate(kf,{duration:dur,easing:'ease-in-out',fill:'forwards'});
   a.onfinish=()=>g.remove();setTimeout(()=>g.remove(),dur+500);
@@ -738,7 +785,7 @@ function afterGame(prev){
     if(app.mode==='p2p'&&actor(S)===me&&prev.actor!==me&&S.phase!=='over')setTimeout(SFX.turn,250);
   }
   if(reduceMotion)return;
-  const deckR=rectOf('#deck .card:last-child')||cardSpot('#deck',44),deadR=rectOf('#dead .card')||cardSpot('#dead',44);
+  const deckR=rectOf('#deck .card:last-child')||cardSpot('#deck',44),deadR=rectOf('#dead .card:last-child')||cardSpot('#dead',44);
   const handR=p=>rectOf(`#opp-hand-${p} .card:last-child`)||cardSpot(`#opp-hand-${p}`,30);
   const present=new Set();let di=0;
   view.querySelectorAll('[data-k]').forEach(el=>{
@@ -758,8 +805,18 @@ function afterGame(prev){
   if(newRound)view.querySelectorAll('.opp-hand .card.back').forEach((el,i)=>flyFrom(el,deckR,el.getBoundingClientRect(),{dur:480,delay:110*i+55,fade:true}));
   if(prev&&!newRound)for(const [k,r] of prev.rects){
     if(present.has(k))continue;
-    if(S.dead.includes(k))ghost(r,deadR);
+    if(S.dead.includes(k))ghost(r,deadR,{face:k,dur:520});
     else if(prev.phase==='swap'&&S.phase!=='swap')ghost(r,handR(nxt(S,me)),{dur:560});
+  }
+  if(!stepped)return;
+  // El montón de muertas se asienta cuando le cae una carta.
+  const top=view.querySelector('#dead .card:last-child');
+  if(top&&S.dead.length>(prev.deadN||0))top.animate([{transform:'none'},{transform:'scale(1.08)'},{transform:'none'}],{duration:260,delay:430,easing:'ease-out'});
+  // Cuando a un rival le cambia el número de cartas, su contador da un saltito.
+  if(prev.handN)for(const o of others(S)){
+    if(prev.handN[o]===S.hands[o].length)continue;
+    const b=view.querySelector(`#opp-hand-${o} .opp-count`);
+    if(b)b.animate([{transform:'none'},{transform:'scale(1.4)',offset:.4},{transform:'none'}],{duration:420,delay:200,easing:'ease-out'});
   }
 }
 
@@ -789,7 +846,7 @@ function render(){
   if(app.view==='home')renderHome();
   else if(app.view==='wait')renderWaiting();
   else if(app.view==='loading')view.innerHTML=`<section class="panel wait"><p class="sub">${esc(net.status||'Conectando…')}</p><button type="button" class="btn ghost sm" data-a="home">Cancelar</button></section>`;
-  else if(app.view==='game'&&app.S){renderGame();afterGame(prev)}
+  else if(app.view==='game'&&app.S){renderGame();afterGame(prev);refreshDead()}
   scheduleAuto();
 }
 function renderHome(){
@@ -921,8 +978,14 @@ function centerHTML(extra=''){
     mid=`<div class="face" id="face"><div class="slot">${txt}</div></div>`;
   }
   // La última carta pasada se ve boca arriba hasta que se voltee la siguiente.
-  const top=S.dead[S.dead.length-1],shown=!!(S.callable&&!S.face&&top===S.callable.c);
-  const muertas=`<div class="stack" id="dead">${shown?cardHTML(top):S.dead.length?backHTML():'<div class="slot sm"></div>'}</div>`;
+  const nd=S.dead.length,top=S.dead[nd-1],shown=!!(S.callable&&!S.face&&top===S.callable.c);
+  // Se toca para ver todas las que ya pasaron. Se ve más alto mientras más cartas tiene.
+  let muertas='<div class="stack" id="dead"><div class="slot sm"></div></div>';
+  if(nd){
+    const rots=[-7,5,-1].slice(-Math.min(3,nd));
+    const inner=rots.map((r,i)=>{const st=`--rot:${r}deg`;return i===rots.length-1&&shown?cardHTML(top,{style:st}):backHTML(st)}).join('');
+    muertas=`<button type="button" class="stack dead-pile" id="dead" data-a="dead" aria-label="Ver ${nd===1?'la carta muerta':`las ${nd} cartas muertas`}"><span class="peek" aria-hidden="true">${EYE}</span>${inner}</button>`;
+  }
   return `<div class="center">
     <div class="pile">${monte}<span>Monte · ${S.deck.length}</span></div>
     ${mid}
@@ -1032,13 +1095,17 @@ function renderGame(){
   const myN=S.melds[me].flat().length,canUse=canUseNow();
   const dragHint=ws||canUse?'Arrastra cartas a tus juegos':'Arrastra para acomodar';
   const netTag=app.mode==='p2p'?` · Mesa ${esc(net.code)} · <span class="net ${online()?'on':''}"><i></i>${online()?'Conectado':'Sin conexión'}</span>`:'';
+  const busyOf=p=>(turnOf===p&&!over)||swapWaiting(S,p);
   const oppZone=o=>{
-    const n=S.melds[o].flat().length,h=S.hands[o];
-    return `<div class="zone">
-        <div class="who"><span class="name">${who(o)}${(turnOf===o&&!over)||swapWaiting(S,o)?'<span class="pill">Le toca</span>':''}</span><span class="prog-wrap">${progHTML(n,target)}<span>${n} de ${target} bajadas</span></span></div>
+    const n=S.melds[o].flat().length,h=S.hands[o],busy=busyOf(o);
+    // El contador va primero: los vuelos buscan la última carta con .card:last-child.
+    const count=h.length?`<span class="opp-count" aria-hidden="true">${h.length}</span>`:'';
+    const cards=h.map((c,i)=>over?cardHTML(c,{style:fanStyle(i,h.length,3)}):backHTML(fanStyle(i,h.length))).join('');
+    return `<div class="zone${busy?' turn':''}">
+        <div class="who"><span class="name">${who(o)}${busy?'<span class="pill">Le toca</span>':''}</span><span class="prog-wrap">${progHTML(n,target)}<span>${n} de ${target} bajadas</span></span></div>
         <div class="opp-row">
           <div class="melds opp-melds" data-seat="${o}">${meldsHTML(S.melds[o],hl&&hl.p===o?hl.c:null)}</div>
-          <div class="opp-hand ${over?'shown':''}" id="opp-hand-${o}" aria-label="${h.length} cartas en la mano de ${who(o,true)}">${over?h.map(c=>cardHTML(c)).join(''):h.map(()=>backHTML()).join('')}</div>
+          <div class="opp-hand${over?' shown':busy?' thinking':''}" id="opp-hand-${o}"${over?'':' role="img"'} aria-label="${h.length===1?'1 carta':`${h.length} cartas`} en la mano de ${who(o,true)}">${count}${cards}</div>
         </div>
       </div>`;
   };
@@ -1061,8 +1128,8 @@ function renderGame(){
         <div class="who"><span class="name">Tus juegos</span><span class="prog-wrap">${progHTML(myN,target)}<span>${myN} de ${target} bajadas</span></span></div>
         <div class="melds ${ws?'building':''}" id="my-melds">${ws?wsMeldsHTML():meldsHTML(S.melds[me],hl&&hl.p===me?hl.c:null)}</div>
       </div>
-      <div class="zone">
-        <div class="who"><span class="name">Tu mano${(turnOf===me&&!over)||swapWaiting(S,me)?'<span class="pill">Te toca</span>':''}</span><span class="row">
+      <div class="zone${busyOf(me)?' turn':''}">
+        <div class="who"><span class="name">Tu mano${busyOf(me)?'<span class="pill">Te toca</span>':''}</span><span class="row">
           <span class="hint">${dragHint}</span>
           <span class="seg sm" role="group" aria-label="Ordenar la mano"><button type="button" data-a="sort" data-by="palo" aria-label="Ordenar por palo">Palo</button><button type="button" data-a="sort" data-by="numero" aria-label="Ordenar por número">Número</button></span></span></div>
         <div class="hand" id="hand">${handHTML()}</div>
@@ -1071,7 +1138,7 @@ function renderGame(){
     <div class="actions${freshA?' fresh':''}">${acts}</div>
   </section>`;
   fitScreen();
-  app.rendered={mode:app.mode,code:net.code,round:S.round,seq:S.seq,phase:S.phase,actor:turnOf};
+  app.rendered={mode:app.mode,code:net.code,round:S.round,seq:S.seq,phase:S.phase,actor:turnOf,handN:S.hands.map(h=>h.length),deadN:S.dead.length};
 }
 // Mano en abanico: se encima cuando no cabe y se curva un poco hacia las orillas.
 function fitHand(){
@@ -1548,13 +1615,52 @@ function copyText(text,selId){
   const pick=()=>{const el=$('#'+selId);if(!el)return;const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);toast('Ya está seleccionado: cópialo para compartirlo.')};
   try{navigator.clipboard.writeText(text).then(()=>toast('Copiado. Ya puedes pegarlo y mandarlo.'),pick)}catch{pick()}
 }
-function showDlg(title,html){
+// kind dice qué diálogo está abierto, para poder actualizarlo mientras se juega.
+function showDlg(title,html,kind=null){
   const d=$('#rules-dlg');$('#rules-dlg-t').textContent=title;$('#rules-dlg-body').innerHTML=html;
+  app.dlg=kind;
   if(!d.open)d.showModal();
+}
+// ===== Cartas muertas =====
+const SUIT_LBL={o:'Oros',c:'Copas',e:'Espadas',b:'Bastos'};
+let deadSeen=null;
+// nuevas: las que llegaron con el diálogo abierto; solo esas entran con animación.
+function deadHTML(nuevas=null){
+  const S=app.S,D=S?S.dead:[],n=D.length,by=app.deadBy;
+  if(!n)return '<p class="sub">Todavía no hay cartas muertas en esta mano. Aquí se juntan las que nadie quiso usar.</p>';
+  let k=0;
+  const item=(c,lbl='')=>`<div class="dead-item${nuevas&&nuevas.has(c)?' nw':''}" style="--i:${k++}">${cardHTML(c,{key:false,cls:lbl?'nueva':''})}${lbl?`<span>${lbl}</span>`:''}</div>`;
+  const body=by==='palo'
+    ?`<div class="dead-rows">${SUITS.map(s=>{
+        const cs=sortCards(D.filter(c=>suitOf(c)===s),'numero');
+        return `<div class="dead-row"><span class="suit-lbl" style="--sc:var(--${SUIT_NAME[s]})">${SUIT_LBL[s]}<small>${cs.length===1?'1 carta':`${cs.length} cartas`}</small></span><div class="cards">${cs.length?cs.map(c=>item(c)).join(''):'<span class="empty">Ninguna</span>'}</div></div>`;
+      }).join('')}</div>`
+    :`<div class="dead-grid">${D.slice().reverse().map((c,i)=>item(c,i===0?'Última':'')).join('')}</div>`;
+  return `<div class="dead-dlg${nuevas?' still':''}">
+    <div class="dead-head"><p class="sub">${n===1?'1 carta ya pasó y nadie la usó.':`${n} cartas ya pasaron y nadie las usó.`}</p>
+      <span class="seg sm" role="group" aria-label="Cómo ver las muertas"><button type="button" data-a="dead-sort" data-by="orden" aria-pressed="${by==='orden'}">En orden</button><button type="button" data-a="dead-sort" data-by="palo" aria-pressed="${by==='palo'}">Por palo</button></span></div>
+    ${body}
+  </div>`;
+}
+function openDead(){
+  const S=app.S;if(!S)return;
+  deadSeen={round:S.round,list:S.dead.slice()};
+  showDlg('Cartas muertas',deadHTML(),'dead');
+}
+// Si llega otra carta con el diálogo abierto, se agrega sola.
+function refreshDead(){
+  const S=app.S;
+  if(app.dlg!=='dead'||!S||!$('#rules-dlg').open)return;
+  const same=deadSeen&&deadSeen.round===S.round;
+  if(same&&deadSeen.list.join()===S.dead.join())return;
+  const old=same?new Set(deadSeen.list):null;
+  deadSeen={round:S.round,list:S.dead.slice()};
+  $('#rules-dlg-body').innerHTML=deadHTML(old?new Set(S.dead.filter(c=>!old.has(c))):null);
 }
 const menuHTML=()=>`<div class="menu">
   <button type="button" class="btn second" data-a="sound" aria-pressed="${app.sound}">Sonido: ${app.sound?'prendido':'apagado'}</button>
   <button type="button" class="btn second" data-a="history">Últimas jugadas</button>
+  <button type="button" class="btn second" data-a="dead">Cartas muertas</button>
   <button type="button" class="btn second" data-a="rules">Reglas</button>
   <button type="button" class="btn ghost" data-a="home">Salir de la mesa</button>
 </div>`;
@@ -1568,6 +1674,11 @@ const H={
   },
   sound:()=>{app.sound=!app.sound;store.set('sound',app.sound);if(app.sound)SFX.card();showDlg('Menú',menuHTML())},
   'rules-close':()=>$('#rules-dlg').close(),
+  dead:()=>openDead(),
+  'dead-sort':t=>{
+    app.deadBy=t.dataset.by==='palo'?'palo':'orden';store.set('deadBy',app.deadBy);
+    if(app.dlg==='dead')$('#rules-dlg-body').innerHTML=deadHTML();
+  },
   'local-new':()=>{closeNet();net.role=null;net.code=null;app.mode='local';app.me=0;app.S=deal(app.cfg,1);saveLocal();startGame()},
   'local-continue':()=>{const S=loadLocal();if(!S)return;closeNet();net.role=null;net.code=null;app.mode='local';app.me=0;app.S=S;startGame()},
   'cfg-hand':t=>{app.cfg.hand=+t.dataset.n;store.set('cfg',app.cfg);render()},
@@ -1623,6 +1734,7 @@ document.addEventListener('submit',e=>{
   if(e.target.matches('[data-form="join"]')){e.preventDefault();joinTable($('#join-code').value)}
 });
 $('#rules-dlg').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.close()});
+$('#rules-dlg').addEventListener('close',()=>{app.dlg=null});
 window.addEventListener('hashchange',()=>{if(app.view==='home')render()});
 
 render();
