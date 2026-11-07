@@ -511,6 +511,12 @@ function bestTake(S,p,mode){
   const evalFn=(melds,hand)=>handPotential(hand,gone)+(mode==='hint'?40*preserved(old,melds):0);
   return solve([...old.flat(),f],S.hands[p],evalFn);
 }
+// Lo que se puede bajar solo con la mano, sin carta de la mesa; null si no hay nada.
+function bestLower(S,p){
+  const old=S.melds[p],gone=goneSet(S);
+  const b=solve(old.flat(),S.hands[p],(melds,hand)=>handPotential(hand,gone)+40*preserved(old,melds));
+  return b&&b.hand.length<S.hands[p].length?b:null;
+}
 
 // 2 o 3 jugadores sentados en orden; el turno, las ofertas y el cambio van hacia el siguiente lugar.
 const nxt=(S,p)=>(p+1)%S.hands.length;
@@ -526,13 +532,14 @@ function actor(S){return S.phase==='flip'||S.phase==='discard'?S.turn:S.phase===
 function forced(S,p){return !!(S.phase==='decide'&&S.offer===p&&S.forced)}
 // Cualquiera puede gritar "¡Te obligo!" sobre la última carta que pasó otro jugador, hasta que alguien más la pase o se voltee la siguiente.
 function canCall(S,p){return !!(S.callable&&S.callable.by!==p&&S.phase!=='over')}
-function takeProblem(S,p,melds,hand){
+// f: la carta que se toma de la mesa; sin ella, solo se baja de la mano.
+function meldProblem(S,p,melds,hand,f=null){
   if(!Array.isArray(melds)||!Array.isArray(hand)||!melds.every(Array.isArray))return 'Jugada mal formada.';
-  const f=S.face.c;
-  const before=[...S.hands[p],...S.melds[p].flat(),f].sort().join();
+  const table=f?[...S.melds[p].flat(),f]:S.melds[p].flat();
+  const before=[...S.hands[p],...table].sort().join();
   const after=[...hand,...melds.flat()].sort().join();
   if(before!==after)return 'Las cartas no cuadran con tu mano y tus juegos.';
-  const fixed=new Set([...S.melds[p].flat(),f]);
+  const fixed=new Set(table);
   if(hand.some(c=>fixed.has(c)))return 'Las cartas de la mesa no pueden regresar a tu mano.';
   if(melds.some(m=>!meldKind(m)))return 'Todos tus juegos deben ser tercias o corridas de 3 cartas o más.';
   return null;
@@ -557,8 +564,8 @@ function act(S0,p,a){
     S.seq++;
     return S;
   }
-  // "¡Te obligo!" se puede decir fuera de turno; todo lo demás, solo en tu turno.
-  if(a.t!=='force'&&actor(S0)!==p)throw new Error('No es tu turno.');
+  // "¡Te obligo!" y bajar de la mano se pueden fuera de turno; todo lo demás, solo en tu turno.
+  if(a.t!=='force'&&a.t!=='lower'&&actor(S0)!==p)throw new Error('No es tu turno.');
   const S=clone(S0),n=S.hands.length;
   // q: a quién se quiso obligar.
   const log=(k,c,q)=>{const e={p,k};if(c)e.c=c;if(q!=null)e.q=q;S.log.push(e);if(S.log.length>40)S.log.shift()};
@@ -588,7 +595,7 @@ function act(S0,p,a){
     else{S.dead.push(c);S.turn=nxt(S,S.face.by);S.face=null;S.offer=null;S.phase='flip'}
   }else if(a.t==='take'){
     if(S.phase!=='decide')throw new Error('No hay carta que tomar.');
-    const err=takeProblem(S,p,a.melds,a.hand);if(err)throw new Error(err);
+    const err=meldProblem(S,p,a.melds,a.hand,S.face.c);if(err)throw new Error(err);
     const c=S.face.c;
     S.melds[p]=a.melds.map(sortMeld);S.hands[p]=a.hand.slice();S.face=null;S.offer=null;S.forced=false;S.callable=null;log('take',c);
     if(!S.hands[p].length){S.phase='over';S.winner=p;S.score[p]++;log('win')}
@@ -597,6 +604,14 @@ function act(S0,p,a){
     if(S.phase!=='discard')throw new Error('Ahora no se paga.');
     const i=S.hands[p].indexOf(a.c);if(i<0)throw new Error('Esa carta no está en tu mano.');
     S.hands[p].splice(i,1);S.face={c:a.c,src:'pago',by:p};S.offer=nxt(S,p);S.passes=0;S.forced=false;S.callable=null;S.phase='decide';log('pay',a.c);
+  }else if(a.t==='lower'){
+    // Lo que ya es juego en tu mano se baja cuando quieras, menos durante el cambio (ese es con la mano completa).
+    if(S.phase==='over'||S.phase==='swap')throw new Error('Ahora no se puede bajar.');
+    const err=meldProblem(S,p,a.melds,a.hand);if(err)throw new Error(err);
+    if(a.hand.length>=S.hands[p].length)throw new Error('No bajaste ninguna carta de tu mano.');
+    S.melds[p]=a.melds.map(sortMeld);S.hands[p]=a.hand.slice();log('lower');
+    // Para ganar hace falta una carta de la mesa: solo gana así quien ya tomó una y todavía no paga.
+    if(!S.hands[p].length&&S.phase==='discard'&&S.turn===p){S.phase='over';S.winner=p;S.score[p]++;log('win')}
   }else throw new Error('Jugada desconocida.');
   S.seq++;
   return S;
@@ -618,6 +633,7 @@ function aiChoose(S,p){
   if(S.phase==='over')return null;
   if(S.phase==='swap')return S.swap&&S.swap[p]==null?{t:'swap',c:aiDiscard(S,p)}:null;
   if(aiWantsForce(S,p))return {t:'force'};
+  const low=bestLower(S,p);if(low)return {t:'lower',melds:low.melds,hand:low.hand};
   if(actor(S)!==p)return null;
   if(S.phase==='flip')return {t:'flip'};
   if(S.phase==='decide'){
@@ -932,6 +948,7 @@ function rulesHTML(){
     <div><h3>La meta</h3><p>Cada quien recibe 8 cartas. Gana el primero que baje 9 en juegos: todas las de su mano más una que tome de la mesa. Si juegan con 9 o 10 cartas, se gana con 10 u 11. En línea pueden jugar 2 o 3; entre 3, con 10 cartas el monte se acaba pronto.</p></div>
     <div><h3>Los juegos</h3><p><b>Tercia</b>: 3 o 4 cartas del mismo número, como tres reyes. <b>Corrida</b>: 3 o más cartas seguidas del mismo palo, como 6, 7 y sota de copas. No da la vuelta: después del rey no sigue el as.</p></div>
     <div><h3>Tu turno</h3><p>Volteas la carta de arriba del monte. Si te sirve, la bajas en un juego junto con cartas de tu mano y luego <b>pagas</b>: tiras una carta para tu rival. Las cartas nunca se guardan en la mano.</p></div>
+    <div><h3>Bajar cuando quieras</h3><p>Lo que en tu mano ya es juego lo puedes bajar en cualquier momento, sea o no tu turno: toca <b>«Bajar juego»</b> y arma el juego con tus cartas. También puedes agregar una carta que le quede a un juego que ya bajaste. Lo único es esperar a que termine el cambio. Para ganar sigues necesitando una carta de la mesa.</p></div>
     <div><h3>Pasar</h3><p>Si la carta no te sirve, la pasas y el siguiente jugador puede usarla, y así en orden. Si nadie la quiere, se va a las muertas y voltea el que sigue de quien la sacó. La carta que pagas se le ofrece a todos menos a ti.</p></div>
     <div><h3>Acomodar</h3><p>Al bajar puedes reacomodar tus juegos. Si volteas el 6 de copas y tienes el 4 de copas, puedes sacar el 5 de copas de tu cuarta de cincos y armar la corrida 4, 5 y 6. Arrastra cada carta al juego donde la quieres, o tócalas y luego «Aquí».</p></div>
     <div><h3>Obligar</h3><p>Si alguien pasa una carta que le queda directo a uno de sus juegos bajados, cualquier otro puede decir <b>«¡Te obligo!»</b> antes de que otro la pase o se voltee la siguiente: la tiene que tomar y pagar otra. Nadie te avisa, te tienes que dar cuenta tú. Si te equivocas, no pasa nada y sigue el juego.</p></div>
@@ -1039,11 +1056,16 @@ function renderWaiting(){
 }
 
 function progHTML(n,t){return `<span class="prog" aria-hidden="true">${Array.from({length:t},(_,i)=>`<i class="${i<n?'on':''}"></i>`).join('')}</span>`}
-const justSwapped=S=>!!(S.got&&S.phase==='flip'&&(S.log[S.log.length-1]||{}).k==='swapdone');
+// Sigue siendo "recién cambiaron" aunque alguien ya haya bajado de su mano.
+function justSwapped(S){
+  if(!S.got||S.phase!=='flip')return false;
+  for(let i=S.log.length-1;i>=0;i--){const k=S.log[i].k;if(k==='swapdone')return true;if(k!=='lower')return false}
+  return false;
+}
 const swapWaiting=(S,p)=>S.phase==='swap'&&!!S.swap&&S.swap[p]==null;
 // Quién obligó en la jugada actual (el último "¡Te obligo!" que sí contó).
 function forcer(S){for(let i=S.log.length-1;i>=0;i--)if(S.log[i].k==='force')return S.log[i].p;return nxt(S,app.me)}
-function lastTaken(S){const L=S.log.slice(-2);for(let i=L.length-1;i>=0;i--)if(L[i].k==='take')return L[i];return null}
+function lastTaken(S){const L=S.log.slice(-2);for(let i=L.length-1;i>=0;i--)if(L[i].k==='take'||L[i].k==='lower')return L[i];return null}
 function meldsHTML(melds,hl){
   if(!melds.length)return '<span class="empty">Sin juegos bajados</span>';
   return melds.map((m,i)=>`<div class="meld" data-i="${i}" title="${meldKind(m)||''}">${m.map(c=>cardHTML(c,{cls:c===hl?'nueva':''})).join('')}</div>`).join('');
@@ -1058,25 +1080,27 @@ function wsMeldsHTML(){
 function handHTML(){
   const S=app.S,ui=app.ui,ws=ui.build;
   const cards=orderedHand(currentHand());
-  if(!cards.length)return `<span class="empty">${S.phase==='over'?'Sin cartas en mano':'Ya bajaste todas: espera una carta que le quede a tus juegos.'}</span>`;
+  if(!cards.length)return `<span class="empty">${S.phase==='over'?'Sin cartas en mano':ws?'Todas tus cartas van a tus juegos.':'Ya bajaste todas: espera una carta que le quede a tus juegos.'}</span>`;
   const got=justSwapped(S)?S.got[app.me]:null,given=S.phase==='swap'&&S.swap?S.swap[app.me]:null;
   return cards.map(c=>cardHTML(c,{act:'tap',cls:((ws?ws.sel.includes(c):ui.paySel===c||c===given)?'sel ':'')+(c===got?'nueva':'')})).join('');
 }
 function centerHTML(extra=''){
   const S=app.S,me=app.me,ui=app.ui,short=p=>esc(shortOf(p));
-  const canFlip=S.phase==='flip'&&S.turn===me&&!ui.busy&&linked();
+  const canFlip=S.phase==='flip'&&S.turn===me&&!ui.busy&&!ui.build&&linked();
   const nb=S.deck.length?Math.min(4,1+Math.floor(S.deck.length/7)):0;
   const inner=nb?Array.from({length:nb},(_,i)=>backHTML(`transform:translate(${i*2}px,${-i*2}px)`)).join(''):'<div class="slot sm">Vacío</div>';
   const monte=canFlip?`<button type="button" class="stack live" id="deck" data-a="flip" aria-label="Voltear carta del monte">${inner}</button>`:`<div class="stack" id="deck">${inner}</div>`;
+  // Solo al usar la carta de la mesa se va a tus juegos; al bajar de tu mano, sigue a la vista.
+  const inBuild=!!(ui.build&&ui.build.face);
   let mid;
-  if(S.face&&!ui.build){
+  if(S.face&&!inBuild){
     const f=S.face,mine=f.by===me;
     const tag=f.src==='monte'?(mine?'La volteaste tú':`La volteó ${short(f.by)}`):(mine?'Tu pago':`Pago de ${short(f.by)}`);
     const decide=S.offer===me?'Decides tú':`Decide ${short(S.offer)}`;
     const glow=S.phase==='decide'&&actor(S)===me;
     mid=`<div class="face${glow?' mine':''}" id="face">${cardHTML(f.c)}<span class="tag">${tag} · ${decide}</span></div>`;
   }else{
-    const txt=ui.build?'':S.phase==='over'?'Fin de la mano':S.phase==='swap'?'Cambio de cartas':S.phase==='discard'?'Esperando el pago':'Voltea una carta';
+    const txt=inBuild?'':S.phase==='over'?'Fin de la mano':S.phase==='swap'?'Cambio de cartas':S.phase==='discard'?'Esperando el pago':'Voltea una carta';
     mid=`<div class="face" id="face"><div class="slot">${txt}</div></div>`;
   }
   // Las muertas van boca arriba, cada una chueca a su manera (messStyle). La de arriba lleva anillo mientras todavía se puede obligar.
@@ -1097,7 +1121,7 @@ function centerHTML(extra=''){
 function buildProblem(){
   const ws=app.ui.build;if(!ws)return '';
   const bad=ws.melds.filter(m=>!meldKind(m));
-  if(!bad.length)return '';
+  if(!bad.length)return !ws.face&&ws.hand.length===ws.fromHand.length?'Baja al menos una carta de tu mano, o cancela.':'';
   return bad.some(m=>m.length<3)?'Cada juego necesita al menos 3 cartas.':'Hay un juego que no es tercia ni corrida.';
 }
 function promptHTML(){
@@ -1109,7 +1133,7 @@ function promptHTML(){
   }
   if(ui.build){
     const ws=ui.build,prob=buildProblem();
-    if(!ws.moves)return `<strong>Arrastra</strong> tus cartas a un juego para armarlo con ${withArt(ws.face)}, o tócalas y luego <strong>Aquí</strong>.`;
+    if(!ws.moves)return ws.face?`<strong>Arrastra</strong> tus cartas a un juego para armarlo con ${withArt(ws.face)}, o tócalas y luego <strong>Aquí</strong>.`:'<strong>Arrastra</strong> a un juego las cartas de tu mano que ya son juego, o tócalas y luego <strong>＋ Juego nuevo</strong>.';
     return prob?`<span class="warn">${prob}</span>`:'Todo cuadra. Toca <strong>Bajar</strong> para confirmar.';
   }
   if(S.phase==='over')return S.winner===-1?'Se acabó el monte y nadie bajó todo: <strong>tablas</strong>.':S.winner===me?'<strong>¡Ganaste la mano!</strong>':`<strong>${who(S.winner)} ganó la mano.</strong>`;
@@ -1167,13 +1191,15 @@ function actionsHTML(){
   }
   // El botón sale siempre que tu rival pasó una carta teniendo juegos bajados, le quede o no: tú decides.
   const call=canCall(S,me)?btn('force','force','¡Te obligo!','O'):'';
-  if(actor(S)!==me)return call;
-  if(S.phase==='flip')return btn('primary','flip',S.deck.length?'Voltear carta':'Cerrar la mano','V');
+  // Bajar de la mano no depende del turno. No avisa si tienes juego: de eso te das cuenta tú.
+  const low=canLowerNow()?btn('second','lower','Bajar juego','B'):'';
+  if(actor(S)!==me)return low+call;
+  if(S.phase==='flip')return btn('primary','flip',S.deck.length?'Voltear carta':'Cerrar la mano','V')+low;
   if(S.phase==='decide'){
     const fz=forced(S,me);
-    return `${btn('primary','use','Usar carta','U')}${btn('second','pass','Pasar','P',fz?' disabled':'')}${call}`;
+    return `${btn('primary','use','Usar carta','U')}${btn('second','pass','Pasar','P',fz?' disabled':'')}${low}${call}`;
   }
-  if(S.phase==='discard')return ui.paySel?btn('primary','pay',`Pagar ${withArt(ui.paySel)}`,'Enter'):pick('vas a pagar');
+  if(S.phase==='discard')return (ui.paySel?btn('primary','pay',`Pagar ${withArt(ui.paySel)}`,'Enter'):pick('vas a pagar'))+low;
   return '';
 }
 function logText(e){
@@ -1184,6 +1210,7 @@ function logText(e){
     case 'flip':return mine?`Volteaste ${c}.`:`${w} volteó ${c}.`;
     case 'pass':return mine?`Pasaste ${c}.`:`${w} pasó ${c}.`;
     case 'take':return mine?`Bajaste con ${c}.`:`${w} bajó con ${c}.`;
+    case 'lower':return mine?'Bajaste cartas de tu mano.':`${w} bajó cartas de su mano.`;
     case 'pay':return mine?`Pagaste ${c}.`:`${w} pagó ${c}.`;
     case 'force':return mine?`¡Obligaste a ${qm} a tomar ${c}!`:q===me?`¡${w} te obligó a tomar ${c}!`:`¡${w} obligó a ${qm} a tomar ${c}!`;
     case 'badforce':return mine?`Quisiste obligar, pero ${c} no le quedaba a ${qm}.`:q===me?`${w} quiso obligarte, pero ${c} no te quedaba.`:`${w} quiso obligar a ${qm}, pero ${c} no le quedaba.`;
@@ -1196,7 +1223,7 @@ function logText(e){
 function renderGame(){
   const S=app.S,me=app.me,ui=app.ui,ws=ui.build,target=S.cfg.hand+1;
   const over=S.phase==='over',hl=lastTaken(S),turnOf=actor(S),ops=others(S);
-  const myN=S.melds[me].flat().length,canUse=canUseNow();
+  const myN=S.melds[me].flat().length,canUse=canUseNow()||canLowerNow();
   const dragHint=ws||canUse?'Arrastra cartas a tus juegos':'Arrastra para acomodar';
   const netTag=app.mode==='p2p'?` · Mesa ${esc(net.code)} · <span class="net ${online()?'on':''}"><i></i>${online()?'Conectado':'Sin conexión'}</span>`:'';
   const busyOf=p=>(turnOf===p&&!over)||swapWaiting(S,p);
@@ -1274,6 +1301,7 @@ window.addEventListener('resize',fitScreen);
 // o de regreso a la mano; y cuando te ofrecen una carta, soltarla (o soltar una tuya) en tus juegos es como "Usar carta".
 let drag=null,suppressUntil=0,hot=null;
 const canUseNow=()=>{const S=app.S;return !!S&&app.view==='game'&&!app.ui.build&&!app.ui.busy&&S.phase==='decide'&&actor(S)===app.me&&linked()};
+const canLowerNow=()=>{const S=app.S;return !!S&&app.view==='game'&&!app.ui.build&&!app.ui.busy&&S.phase!=='over'&&S.phase!=='swap'&&S.hands[app.me].length>0&&linked()};
 // Si arrastras una carta que tenías marcada junto con otras, se van todas las marcadas.
 function dragCards(d){const ws=app.ui.build;return ws&&ws.sel.length>1&&ws.sel.includes(d.c)?ws.sel.slice():[d.c]}
 function setHot(el){if(hot===el)return;if(hot)hot.classList.remove('drop-on');hot=el||null;if(hot)hot.classList.add('drop-on')}
@@ -1290,10 +1318,14 @@ function dropTarget(px,py,d){
     if(d.src==='meld'&&over(hz))return {kind:'hand',el:dragCards(d).every(c=>ws.fromHand.includes(c))?hand:null};
     return null;
   }
-  if(!canUseNow()||d.src==='meld')return null;
-  const m=meldAt('#my-melds .meld');if(m)return {kind:'use',el:m,i:+m.dataset.i};
-  if(over(mz))return {kind:'use',el:mm,i:'face'};
-  if(d.src==='hand'&&over($('#face'),8))return {kind:'use',el:$('#face'),i:'face'};
+  if(d.src==='meld')return null;
+  // Si te ofrecen una carta, soltar en tus juegos es usarla; si no, es bajar de tu mano.
+  const use=canUseNow();
+  if(!use&&!(d.src==='hand'&&canLowerNow()))return null;
+  const kind=use?'use':'lower';
+  const m=meldAt('#my-melds .meld');if(m)return {kind,el:m,i:+m.dataset.i};
+  if(over(mz))return {kind,el:mm,i:'face'};
+  if(use&&d.src==='hand'&&over($('#face'),8))return {kind,el:$('#face'),i:'face'};
   return null;
 }
 view.addEventListener('pointerdown',e=>{
@@ -1365,6 +1397,11 @@ function dropOn(d,t,px){
     if(d.src==='hand'||to!==fi)wsMove([d.c],to);
     SFX.card(.2);render();return true;
   }
+  if(t.kind==='lower'){
+    startLower(false);
+    wsMove([d.c],t.i==='face'?'new':t.i);
+    SFX.card(.2);render();return true;
+  }
   const ws=app.ui.build;if(!ws)return false;
   const cards=dragCards(d);
   if(t.kind==='hand'){
@@ -1385,6 +1422,13 @@ window.addEventListener('pointercancel',endDrag);
 function startBuild(show=true){
   const S=app.S,me=app.me;
   app.ui.build={face:S.face.c,melds:S.melds[me].map(m=>m.slice()).concat([[S.face.c]]),hand:S.hands[me].slice(),fromHand:S.hands[me].slice(),sel:[],moves:0};
+  if(show)render();
+}
+// Bajar de tu mano: es lo mismo que armar, pero sin carta de la mesa (face vacío).
+function startLower(show=true){
+  const S=app.S,me=app.me;
+  app.ui.paySel=null;
+  app.ui.build={face:null,melds:S.melds[me].map(m=>m.slice()),hand:S.hands[me].slice(),fromHand:S.hands[me].slice(),sel:[],moves:0};
   if(show)render();
 }
 // Mueve cartas a un juego (su número), a uno nuevo ('new') o a la mano ('hand'). No dibuja.
@@ -1409,10 +1453,18 @@ function wsPut(target){
 
 // ===== Jugadas =====
 let busyT=null;
+// Cuando otro jugador cambia la mesa, lo que estabas haciendo sigue mientras todavía valga.
+function keepUi(S,me=app.me){
+  const ui=app.ui,ws=ui.build,h=S.hands[me];
+  const sameHand=ws&&ws.fromHand.length===h.length&&ws.fromHand.every(c=>h.includes(c));
+  const faceOk=ws&&(!ws.face||(S.phase==='decide'&&S.offer===me&&!!S.face&&S.face.c===ws.face));
+  if(ws&&!(S.phase!=='over'&&S.phase!=='swap'&&sameHand&&faceOk))ui.build=null;
+  if(ui.paySel&&!(h.includes(ui.paySel)&&((S.phase==='discard'&&S.turn===me)||swapWaiting(S,me))))ui.paySel=null;
+}
 function apply(p,a){
   const base=app.S;let N;
   try{N=act(base,p,a)}catch(e){toast(e.message);return}
-  app.ui.build=null;app.ui.paySel=null;
+  if(p===app.me){app.ui.build=null;app.ui.paySel=null}else keepUi(N);
   if(app.mode==='local'){app.S=N;saveLocal();render();return}
   if(!linked()){toast(netProblem());render();return}
   if(net.role==='host'){app.S=N;saveHost();sendState();render();return}
@@ -1650,7 +1702,7 @@ function hostOnMsg(t,m){
   if(m.t==='act'&&app.S){
     let N;
     try{N=act(app.S,i,m.a)}catch(e){send(topic.g(net.code,g.id),{t:'err',msg:e.message});sendState();return}
-    app.S=N;app.ui.build=null;app.ui.paySel=null;saveHost();sendState();render();
+    app.S=N;keepUi(N);saveHost();sendState();render();
   }else if(!was)sync();
 }
 async function joinTable(raw){
@@ -1702,7 +1754,8 @@ function guestOnMsg(t,m){
   const seat=Number.isInteger(m.seat)&&m.seat>0&&m.seat<MAXP?m.seat:app.me;
   if(m.t==='state'&&m.S&&Array.isArray(m.S.hands)&&m.S.hands[seat]){
     const S=m.S;
-    if(!app.S||app.S.seq!==S.seq||app.S.round!==S.round||app.me!==seat){app.ui.build=null;app.ui.paySel=null}
+    if(!app.S||app.me!==seat){app.ui.build=null;app.ui.paySel=null}
+    else if(app.S.seq!==S.seq||app.S.round!==S.round)keepUi(S,seat);
     app.me=seat;app.S=S;net.on=Array.isArray(m.on)?m.on:[];net.joined=true;
     app.ui.busy=false;clearTimeout(busyT);
     const was=app.view;app.view='game';refresh();
@@ -1796,6 +1849,7 @@ const H={
   'copy-invite':()=>{const link=inviteLink();copyText(link||net.code,link?'linkbox':'bigcode')},
   flip:()=>apply(app.me,{t:'flip'}),
   use:()=>startBuild(),
+  lower:()=>startLower(),
   pass:()=>apply(app.me,{t:'pass'}),
   force:()=>apply(app.me,{t:'force'}),
   tap:t=>{
@@ -1806,7 +1860,7 @@ const H={
   },
   give:()=>{if(app.ui.paySel)apply(app.me,{t:'swap',c:app.ui.paySel})},
   put:t=>wsPut(t.dataset.i),
-  'b-confirm':()=>{const ws=app.ui.build;if(ws)apply(app.me,{t:'take',melds:ws.melds,hand:ws.hand})},
+  'b-confirm':()=>{const ws=app.ui.build;if(ws)apply(app.me,{t:ws.face?'take':'lower',melds:ws.melds,hand:ws.hand})},
   'b-cancel':()=>{app.ui.build=null;render()},
   pay:()=>{if(app.ui.paySel)apply(app.me,{t:'pay',c:app.ui.paySel})},
   next:()=>apply(app.me,{t:'next'}),
@@ -1834,12 +1888,12 @@ document.addEventListener('keydown',e=>{
 // ===== Teclado =====
 // Cada tecla le da clic al botón que ya está en pantalla, así solo funciona cuando ese botón se puede usar.
 const KEYS=[
-  [['Espacio','Enter'],'El botón principal: voltear, usar, pagar, dar la carta, otra mano. Al armar, junta las cartas marcadas con la que estás usando; otra vez Enter, y bajas'],
+  [['Espacio','Enter'],'El botón principal: voltear, usar, pagar, dar la carta, otra mano. Al armar, junta las cartas marcadas con la que estás usando (o en un juego nuevo, si bajas de tu mano); otra vez Enter, y bajas'],
   [['V'],'Voltear carta del monte'],
   [['U'],'Usar la carta'],
   [['P'],'Pasar la carta'],
   [['O'],'¡Te obligo!'],
-  [['B'],'Bajar tus juegos'],
+  [['B'],'Bajar juego de tu mano cuando quieras; al armar, confirmar lo que armaste'],
   [['N'],'Mandar las cartas marcadas a un juego nuevo'],
   [['1','…','9','0'],'Tocar la carta 1 a 9 de tu mano (0 es la décima)'],
   [['←','→'],'Moverte entre tus cartas; con Shift las cambias de lugar'],
@@ -1868,16 +1922,16 @@ document.addEventListener('keydown',e=>{
   switch(k.length===1?k.toLowerCase():k){
     case ' ':case 'Enter':{
       if(onBtn)return;
-      // Al armar, con cartas marcadas, Enter las junta con la carta que estás usando.
+      // Al armar, con cartas marcadas, Enter las junta con la carta que estás usando; si bajas de tu mano, en un juego nuevo.
       const ws=ui.build,fi=ws&&ws.sel.length?ws.melds.findIndex(m=>m.includes(ws.face)):-1;
-      if(fi>=0){wsPut(String(fi));done=true;break}
+      if(fi>=0||(ws&&!ws.face&&ws.sel.length)){wsPut(fi>=0?String(fi):'new');done=true;break}
       done=clickA('.actions .btn.primary');break;
     }
     case 'v':done=clickA('.actions [data-a="flip"]')||clickA('#deck[data-a="flip"]');break;
     case 'u':done=clickA('.actions [data-a="use"]');break;
     case 'p':done=clickA('.actions [data-a="pass"]');break;
     case 'o':done=clickA('.actions [data-a="force"]');break;
-    case 'b':done=clickA('.actions [data-a="b-confirm"]');break;
+    case 'b':done=clickA('.actions [data-a="b-confirm"]')||clickA('.actions [data-a="lower"]');break;
     case 'n':done=clickA('#my-melds [data-a="put"][data-i="new"]');break;
     case 'r':done=clickA(`[data-a="sort"][data-by="${app.sortBy==='palo'?'numero':'palo'}"]`);break;
     case 'm':openDead();done=true;break;
