@@ -1181,7 +1181,7 @@ function actionsHTML(){
   // Cada botón dice su tecla (ver el teclado más abajo).
   const btn=(cls,a,label,key,extra='')=>`<button type="button" class="btn ${cls}" data-a="${a}" aria-keyshortcuts="${key==='Esc'?'Escape':key}"${extra}>${label}<kbd aria-hidden="true">${key}</kbd></button>`;
   const pick=what=>`<span class="sub">Toca la carta que ${what}${matchMedia('(hover:hover) and (pointer:fine)').matches?' (o su número: 1, 2, 3…)':''}.</span>`;
-  if(ui.build)return `${btn('primary','b-confirm','Bajar','B',buildProblem()?' disabled':'')}
+  if(ui.build)return `${btn('primary','b-confirm','Bajar','D',buildProblem()?' disabled':'')}
     ${ui.build.sel.length&&ui.build.sel.every(c=>ui.build.fromHand.includes(c))?'<button type="button" class="btn second" data-a="put" data-i="hand">A la mano</button>':''}
     ${btn('ghost','b-cancel','Cancelar','Esc')}`;
   if(S.phase==='over')return `${btn('primary','next','Otra mano','Enter')}<button type="button" class="btn ghost" data-a="home">Salir</button>`;
@@ -1190,14 +1190,14 @@ function actionsHTML(){
     return ui.paySel?btn('primary','give',`Darle ${withArt(ui.paySel)}`,'Enter'):pick('le vas a dar');
   }
   // El botón sale siempre que tu rival pasó una carta teniendo juegos bajados, le quede o no: tú decides.
-  const call=canCall(S,me)?btn('force','force','¡Te obligo!','O'):'';
+  const call=canCall(S,me)?btn('force','force','¡Te obligo!','F'):'';
   // Bajar de la mano no depende del turno. No avisa si tienes juego: de eso te das cuenta tú.
-  const low=canLowerNow()?btn('second','lower','Bajar juego','B'):'';
+  const low=canLowerNow()?btn('second','lower','Bajar juego','D'):'';
   if(actor(S)!==me)return low+call;
   if(S.phase==='flip')return btn('primary','flip',S.deck.length?'Voltear carta':'Cerrar la mano','V')+low;
   if(S.phase==='decide'){
     const fz=forced(S,me);
-    return `${btn('primary','use','Usar carta','U')}${btn('second','pass','Pasar','P',fz?' disabled':'')}${low}${call}`;
+    return `${btn('primary','use','Usar carta','A')}${btn('second','pass','Pasar','S',fz?' disabled':'')}${low}${call}`;
   }
   if(S.phase==='discard')return (ui.paySel?btn('primary','pay',`Pagar ${withArt(ui.paySel)}`,'Enter'):pick('vas a pagar'))+low;
   return '';
@@ -1889,16 +1889,16 @@ document.addEventListener('keydown',e=>{
 // Cada tecla le da clic al botón que ya está en pantalla, así solo funciona cuando ese botón se puede usar.
 const KEYS=[
   [['Espacio','Enter'],'El botón principal: voltear, usar, pagar, dar la carta, otra mano. Al armar, junta las cartas marcadas con la que estás usando (o en un juego nuevo, si bajas de tu mano); otra vez Enter, y bajas'],
+  [['A'],'Usar la carta'],
+  [['S'],'Pasar la carta'],
+  [['D'],'Bajar juego de tu mano cuando quieras; al armar, confirmar lo que armaste'],
+  [['F'],'¡Te obligo!'],
+  [['C'],'Mandar las cartas marcadas a un juego nuevo'],
   [['V'],'Voltear carta del monte'],
-  [['U'],'Usar la carta'],
-  [['P'],'Pasar la carta'],
-  [['O'],'¡Te obligo!'],
-  [['B'],'Bajar juego de tu mano cuando quieras; al armar, confirmar lo que armaste'],
-  [['N'],'Mandar las cartas marcadas a un juego nuevo'],
   [['1','…','9','0'],'Tocar la carta 1 a 9 de tu mano (0 es la décima)'],
   [['←','→'],'Moverte entre tus cartas; con Shift las cambias de lugar'],
   [['R'],'Ordenar tu mano por palo o por número'],
-  [['M'],'Ver las cartas muertas'],
+  [['X'],'Ver las cartas muertas'],
   [['Esc'],'Cancelar, quitar la carta marcada o cerrar'],
   [['?'],'Ver esta lista']
 ];
@@ -1913,7 +1913,7 @@ document.addEventListener('keydown',e=>{
   const dlg=$('#rules-dlg');
   if(dlg.open){
     // La misma tecla que lo abrió lo cierra.
-    if(((k==='m'||k==='M')&&app.dlg==='dead')||(k==='?'&&app.dlg==='keys')){e.preventDefault();dlg.close()}
+    if(((k==='x'||k==='X')&&app.dlg==='dead')||(k==='?'&&app.dlg==='keys')){e.preventDefault();dlg.close()}
     return;
   }
   if(app.view!=='game'||!app.S)return;
@@ -1928,13 +1928,13 @@ document.addEventListener('keydown',e=>{
       done=clickA('.actions .btn.primary');break;
     }
     case 'v':done=clickA('.actions [data-a="flip"]')||clickA('#deck[data-a="flip"]');break;
-    case 'u':done=clickA('.actions [data-a="use"]');break;
-    case 'p':done=clickA('.actions [data-a="pass"]');break;
-    case 'o':done=clickA('.actions [data-a="force"]');break;
-    case 'b':done=clickA('.actions [data-a="b-confirm"]')||clickA('.actions [data-a="lower"]');break;
-    case 'n':done=clickA('#my-melds [data-a="put"][data-i="new"]');break;
+    case 'a':done=clickA('.actions [data-a="use"]');break;
+    case 's':done=clickA('.actions [data-a="pass"]');break;
+    case 'd':done=clickA('.actions [data-a="b-confirm"]')||clickA('.actions [data-a="lower"]');break;
+    case 'f':done=clickA('.actions [data-a="force"]');break;
+    case 'c':done=clickA('#my-melds [data-a="put"][data-i="new"]');break;
     case 'r':done=clickA(`[data-a="sort"][data-by="${app.sortBy==='palo'?'numero':'palo'}"]`);break;
-    case 'm':openDead();done=true;break;
+    case 'x':openDead();done=true;break;
     case '?':H.keys();done=true;break;
     case 'Escape':
       if(ui.build)done=clickA('[data-a="b-cancel"]');
